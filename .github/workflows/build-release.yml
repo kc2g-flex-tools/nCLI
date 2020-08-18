@@ -1,0 +1,57 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  release:
+    types: [ created ]
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ['1.13', '1.14']
+        os: ['linux']
+        arch: ['amd64', 'arm']
+        include:
+          - go: '1.14'
+            release: true
+
+    steps:
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go }}
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+        if [ -f Gopkg.toml ]; then
+            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+            dep ensure
+        fi
+
+    - name: Build
+      run: go build -v .
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+
+    - name: Upload to Release
+      if: github.event.release.id && matrix.release
+      run: |
+        curl -f -sSL -X POST \
+        -H "Authorization: token ${{ secrets.GITHUB_TOKEN}}" \
+        -H "Content-Type: application/octet-stream" \
+        --upload-file nCLI \
+        "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${{github.event.release.id}}/assets?name=nCLI-${{matrix.os}}-${{matrix.arch}}"
